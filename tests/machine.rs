@@ -1,5 +1,5 @@
 use rust_modem_safety_island::{
-    dispatch, Cell, Connected, Event, Idle, RlfCause, RrcState, TransitionOutcome,
+    Cell, Connected, Event, Idle, RlfCause, RrcState, TransitionOutcome, dispatch,
 };
 
 #[test]
