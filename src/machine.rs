@@ -20,6 +20,25 @@ pub enum DispatchError {
     UnexpectedEvent { state: StateKind, event: EventKind },
 }
 
+/// Applies an event to an RRC state.
+///
+/// `dispatch` takes ownership of `state`. On rejection it returns stable state
+/// and event kinds, not the input state, so callers that need to retain the
+/// state must clone it before dispatching.
+///
+/// ```
+/// use rust_modem_safety_island::{dispatch, Cell, Event, Idle, RrcState};
+///
+/// let state = RrcState::Idle(Idle {
+///     selected_cell: Cell { pci: 1, rsrp_dbm: -100 },
+/// });
+/// let rejected = dispatch(state.clone(), Event::Release);
+///
+/// assert!(rejected.is_err());
+/// assert_eq!(state, RrcState::Idle(Idle {
+///     selected_cell: Cell { pci: 1, rsrp_dbm: -100 },
+/// }));
+/// ```
 pub fn dispatch(state: RrcState, event: Event) -> Result<Transition, DispatchError> {
     let state_kind = state.kind();
     let event_kind = event.kind();

@@ -107,18 +107,22 @@ fn release_returns_connected_serving_cell_to_idle() {
 
 #[test]
 fn radio_link_failure_returns_connected_serving_cell_to_idle() {
-    let cell = Cell {
+    let serving_cell = Cell {
         pci: 126,
         rsrp_dbm: -88,
     };
+    let reported_cell = Cell {
+        pci: 127,
+        rsrp_dbm: -109,
+    };
     let result = dispatch(
         RrcState::Connected(Connected {
-            serving_cell: cell.clone(),
+            serving_cell: serving_cell.clone(),
             c_rnti: 0x1234,
         }),
         Event::RadioLinkFailure {
             cause: RlfCause::OutOfSync,
-            serving_cell: cell.clone(),
+            serving_cell: reported_cell,
         },
     )
     .unwrap();
@@ -127,7 +131,7 @@ fn radio_link_failure_returns_connected_serving_cell_to_idle() {
     assert_eq!(
         result.state,
         RrcState::Idle(Idle {
-            selected_cell: cell,
+            selected_cell: serving_cell,
         })
     );
 }
@@ -140,10 +144,19 @@ fn release_in_idle_is_rejected_with_stable_kinds() {
             rsrp_dbm: -100,
         },
     });
-    let error = dispatch(state, Event::Release).unwrap_err();
+    let error = dispatch(state.clone(), Event::Release).unwrap_err();
 
     assert_eq!(
         format!("{error:?}"),
         "UnexpectedEvent { state: Idle, event: Release }"
+    );
+    assert_eq!(
+        state,
+        RrcState::Idle(Idle {
+            selected_cell: Cell {
+                pci: 1,
+                rsrp_dbm: -100,
+            },
+        })
     );
 }
