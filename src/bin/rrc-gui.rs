@@ -355,10 +355,21 @@ fn event_row(ui: &mut egui::Ui, index: usize, step: &RaceStep) {
         other => unreachable!("unexpected displayed race event: {other:?}"),
     };
     let (color, detail) = match step.result {
-        Ok(outcome) => (SIGNAL, format!("{outcome:?}")),
-        Err(DispatchError::UnexpectedEvent { state, .. }) => {
-            (REJECTED, format!("UnexpectedEvent: {event} in {state:?}"))
-        }
+        Ok(outcome) => (
+            SIGNAL,
+            format!(
+                "{outcome:?} · CM-{:?} → CM-{:?}",
+                step.before.cm_state(),
+                step.after.cm_state()
+            ),
+        ),
+        Err(DispatchError::UnexpectedEvent { state, .. }) => (
+            REJECTED,
+            format!(
+                "UnexpectedEvent: {event} in {state:?} · CM-{:?} (unchanged)",
+                step.before.cm_state()
+            ),
+        ),
     };
     ui.horizontal(|ui| {
         ui.label(kicker(if index == 0 { "01" } else { "02" }).color(color));
