@@ -84,7 +84,7 @@ struct App {
     stochastic_started: Option<Instant>,
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Procedure {
     #[default]
     Race,
@@ -370,7 +370,45 @@ fn event_row(ui: &mut egui::Ui, index: usize, step: &RaceStep) {
     ui.label(kicker(&detail).color(color));
 }
 
+/// Selects the GUI's initial procedure from one optional CLI argument.
+///
+/// No argument boots into the T300 race. `stochastic` replays the default
+/// seeded run; a scenario name boots into that scenario with replay started.
+fn resolve_procedure(args: &[String], scenarios: &[ScenarioResult]) -> Result<Procedure, String> {
+    let name = match args {
+        [] => return Ok(Procedure::Race),
+        [name] => name,
+        _ => return Err(usage(scenarios)),
+    };
+    match name.as_str() {
+        "race" => Ok(Procedure::Race),
+        "stochastic" => Ok(Procedure::Stochastic),
+        name => scenarios
+            .iter()
+            .position(|scenario| scenario.name == name)
+            .map(Procedure::Scenario)
+            .ok_or_else(|| usage(scenarios)),
+    }
+}
+
+fn usage(scenarios: &[ScenarioResult]) -> String {
+    let mut names: Vec<&str> = scenarios.iter().map(|scenario| scenario.name).collect();
+    names.sort_unstable();
+    format!("usage: rrc-gui [race|stochastic|{}]", names.join("|"))
+}
+
 fn main() -> eframe::Result {
+    let scenarios = run_all();
+    let procedure =
+        match resolve_procedure(&std::env::args().skip(1).collect::<Vec<_>>(), &scenarios) {
+            Ok(procedure) => procedure,
+            Err(usage) => {
+                eprintln!("{usage}");
+                std::process::exit(2);
+            }
+        };
+    let seed = 42_u64;
+    let t300_ms = T300_VALUES_MS[0];
     eframe::run_native(
         "RRC Event Race",
         eframe::NativeOptions {
@@ -379,7 +417,7 @@ fn main() -> eframe::Result {
                 .with_min_inner_size([640.0, 670.0]),
             ..Default::default()
         },
-        Box::new(|cc| {
+        Box::new(move |cc| {
             let mut visuals = egui::Visuals::dark();
             visuals.override_text_color = Some(TEXT);
             visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0_f32, RULE);
@@ -398,8 +436,18 @@ fn main() -> eframe::Result {
                 cc.egui_ctx.set_fonts(fonts);
             }
             Ok(Box::new(App {
-                scenarios: run_all(),
-                seed: "42".into(),
+                scenarios,
+                seed: seed.to_string(),
+                procedure,
+                scenario_started: matches!(procedure, Procedure::Scenario(_)).then(Instant::now),
+                stochastic: matches!(procedure, Procedure::Stochastic).then(|| {
+                    (
+                        seed,
+                        t300_ms,
+                        rust_modem_safety_island::stochastic_run(seed, t300_ms),
+                    )
+                }),
+                stochastic_started: matches!(procedure, Procedure::Stochastic).then(Instant::now),
                 ..App::default()
             }))
         }),
@@ -467,5 +515,29 @@ mod tests {
             ];
             assert_eq!(highlighted_path(&trace), [Edge::Start, accepted, rejected]);
         }
+    }
+
+    #[test]
+    fn cli_arg_selects_initial_procedure() {
+        let scenarios = run_all();
+        assert_eq!(resolve_procedure(&[], &scenarios), Ok(Procedure::Race));
+        assert_eq!(
+            resolve_procedure(&["race".to_owned()], &scenarios),
+            Ok(Procedure::Race)
+        );
+        assert_eq!(
+            resolve_procedure(&["stochastic".to_owned()], &scenarios),
+            Ok(Procedure::Stochastic)
+        );
+        let index = scenarios
+            .iter()
+            .position(|scenario| scenario.name == "suspend-and-resume")
+            .expect("scenario exists");
+        assert_eq!(
+            resolve_procedure(&["suspend-and-resume".to_owned()], &scenarios),
+            Ok(Procedure::Scenario(index))
+        );
+        assert!(resolve_procedure(&["no-such-scenario".to_owned()], &scenarios).is_err());
+        assert!(resolve_procedure(&["race".to_owned(), "extra".to_owned()], &scenarios).is_err());
     }
 }

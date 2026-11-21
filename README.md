@@ -88,6 +88,11 @@ Use **Procedure** to switch from the live T300 race to a lifecycle scenario.
 **回放 / Replay** reveals the state path and dispatch outcome one step at a time.
 The scenario timers are modeled as explicit expiry events, not real timers.
 
+Pass an optional procedure to boot straight into it:
+`cargo run --bin rrc-gui -- suspend-and-resume` opens that scenario with
+replay started; `stochastic` replays the default seeded run; no argument (or
+`race`) opens the live T300 race. Unknown names print usage and exit nonzero.
+
 **Stochastic Run** generates a new trajectory from the entered unsigned
 64-bit seed and the selected T300. Reusing both inputs reproduces the same
 events and simulated timestamps. The run stops on return to `Idle` or after
