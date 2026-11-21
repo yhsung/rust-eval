@@ -35,6 +35,24 @@ The CLI runs four repeatable scenarios:
 The last scenario is intentional: invalid runtime inputs remain observable
 errors rather than silently falling through.
 
+## Concurrency example
+
+Run `cargo run --example concurrent_events` to see two producer threads send
+`SetupComplete` and `T300Expiry` through a channel. Only the receiver owns the
+RRC state. Once both producers are ready, a monotonic clock sets a shared
+deadline 10 ms ahead. The timer thread waits until that deadline to send
+`T300Expiry`. The other thread simulates `SetupComplete` at the same deadline.
+The example races 100 fresh connections and reports which event arrived first:
+
+- `SetupComplete` first establishes the connection; the late expiry is rejected.
+- `T300Expiry` first fails the connection; the late setup is rejected.
+
+Counts depend on scheduling. A shared deadline does not guarantee fairness
+or that both outcomes appear. The timer uses a real elapsed delay, but the
+10 ms value and setup arrival are demo inputs, not 3GPP behavior.
+Run `cargo test --example concurrent_events` to check that whichever event
+arrives first drives the transition and the second is rejected.
+
 ## Run and verify
 
 Use Rust stable with no extra dependencies:
