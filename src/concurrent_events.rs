@@ -8,7 +8,7 @@ use crate::{
     Cell, DispatchError, Event, EventKind, Idle, RrcState, StateKind, TransitionOutcome, dispatch,
 };
 
-const DEMO_T300: Duration = Duration::from_millis(10);
+pub const T300_VALUES_MS: [u64; 8] = [100, 200, 300, 400, 600, 1000, 1500, 2000];
 
 pub struct RaceStep {
     pub event: EventKind,
@@ -26,33 +26,39 @@ fn wait_until(deadline: Instant) {
 
 /// Runs one demo connection and reports both events in receive order.
 pub fn race_events() -> [RaceStep; 2] {
+    let delay = Duration::from_millis(T300_VALUES_MS[0]);
+    race_events_with_delays(delay, delay)
+}
+
+/// Races synthetic expiry and RRCSetup arrivals relative to a common start.
+pub fn race_events_with_delays(t300: Duration, setup_delay: Duration) -> [RaceStep; 2] {
     let idle = RrcState::Idle(Idle {
         selected_cell: Cell {
             pci: 42,
             rsrp_dbm: -95,
         },
     });
-    let connecting = dispatch(idle, Event::StartConnection { transaction_id: 1 })
+    let connecting = dispatch(idle, Event::RrcSetupRequest { transaction_id: 1 })
         .expect("start connection from Idle")
         .state;
 
     let (events, inbox) = mpsc::channel();
     let setup_sender = events.clone();
     let start = Barrier::new(2);
-    let deadline = LazyLock::new(|| Instant::now() + DEMO_T300);
-    let wait_for_deadline = || {
+    let epoch = LazyLock::new(Instant::now);
+    let wait_for_deadline = |delay| {
         start.wait();
-        wait_until(*deadline);
+        wait_until(*epoch + delay);
     };
     thread::scope(|scope| {
         scope.spawn(move || {
-            wait_for_deadline();
+            wait_for_deadline(setup_delay);
             setup_sender
-                .send(Event::SetupComplete { c_rnti: 0x1234 })
+                .send(Event::RrcSetup { c_rnti: 0x1234 })
                 .expect("queue setup completion");
         });
         scope.spawn(move || {
-            wait_for_deadline();
+            wait_for_deadline(t300);
             events.send(Event::T300Expiry).expect("queue expiry");
         });
 
@@ -89,11 +95,11 @@ pub fn race_events() -> [RaceStep; 2] {
 
 #[cfg(test)]
 mod tests {
-    use super::{DEMO_T300, Instant, wait_until};
+    use super::{Duration, Instant, wait_until};
 
     #[test]
     fn scheduled_event_does_not_fire_before_its_deadline() {
-        let deadline = Instant::now() + DEMO_T300;
+        let deadline = Instant::now() + Duration::from_millis(10);
         wait_until(deadline);
         assert!(Instant::now() >= deadline);
     }

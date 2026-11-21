@@ -7,7 +7,7 @@ fn trace_reports_the_received_order_and_preserves_state_on_rejection() {
     let [first, second] = race_events();
     assert_eq!(first.before, StateKind::Connecting);
     let (after, outcome, late) = match first.event {
-        EventKind::SetupComplete => (
+        EventKind::RrcSetup => (
             StateKind::Connected,
             TransitionOutcome::ConnectionEstablished,
             EventKind::T300Expiry,
@@ -15,7 +15,7 @@ fn trace_reports_the_received_order_and_preserves_state_on_rejection() {
         EventKind::T300Expiry => (
             StateKind::Idle,
             TransitionOutcome::ConnectionFailed,
-            EventKind::SetupComplete,
+            EventKind::RrcSetup,
         ),
         other => panic!("unexpected first event: {other:?}"),
     };

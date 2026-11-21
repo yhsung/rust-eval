@@ -12,11 +12,12 @@ claims.
 
 ## Architecture
 
-The model has three runtime states: `Idle`, `Connecting`, and `Connected`.
-Typed events enter a single dispatcher, which returns either a typed transition
-or an explicit `UnexpectedEvent` error. Only `Connecting` owns T300; setup
-completion consumes that timer before entering `Connected`, while T300 expiry
-returns to `Idle`.
+The model has three NR operating states: `Idle`, `Inactive`, and `Connected`.
+It also exposes four procedure phases: `Connecting` (T300), `Resuming` (T319),
+`SelectingCell` (T311), and `Reestablishing` (T301). Each phase owns its timer.
+`RRCSetup` stops T300 immediately; `RRCSetupComplete` is a separate step in
+`Connected`. Resume and reestablishment likewise have separate completion
+events. Unexpected input returns `UnexpectedEvent` without a transition.
 
 `examples/exhaustive_state_event.rs` is independent from the runtime model. It
 deliberately matches every state/event combination without a wildcard arm. The
@@ -25,42 +26,60 @@ compiler reports an uncovered combination.
 
 ## Scenarios
 
-The CLI runs four repeatable scenarios:
+The CLI runs 13 repeatable scenarios:
 
-- `establish-and-release`
-- `t300-expiry`
-- `radio-link-failure`
-- `unexpected-event`
+- Establishment: `establish-and-release`, `setup-rejected`, `t300-expiry`.
+- Inactive and resume: `suspend-and-resume`, `resume-rejected`,
+  `resume-timeout`, `resume-fallback`.
+- Recovery: `radio-link-failure`, `reestablish`, `cell-selection-timeout`,
+  `reestablishment-timeout`, `reestablishment-fallback`.
+- Error handling: `unexpected-event`.
 
-The last scenario is intentional: invalid runtime inputs remain observable
+Invalid runtime inputs remain observable
 errors rather than silently falling through.
 
 ## Concurrency example
 
 Run `cargo run --example concurrent_events` to see two producer threads send
-`SetupComplete` and `T300Expiry` through a channel. Only the receiver owns the
-RRC state. Once both producers are ready, a monotonic clock sets a shared
-deadline 10 ms ahead. The timer thread waits until that deadline to send
-`T300Expiry`. The other thread simulates `SetupComplete` at the same deadline.
-The example races 100 fresh connections and reports which event arrived first:
+`RRCSetup` and `T300Expiry` through a channel. Only the receiver owns the RRC
+state. Both producers share a monotonic start instant. The CLI runs 10 rounds
+with both events scheduled at 100 ms:
 
-- `SetupComplete` first establishes the connection; the late expiry is rejected.
+- `RRCSetup` first establishes the connection; the late expiry is rejected.
 - `T300Expiry` first fails the connection; the late setup is rejected.
 
-Counts depend on scheduling. A shared deadline does not guarantee fairness
-or that both outcomes appear. The timer uses a real elapsed delay, but the
-10 ms value and setup arrival are demo inputs, not 3GPP behavior.
+Counts depend on scheduling. The demo intentionally delivers both events,
+even when a real stack would cancel the timer after receiving `RRCSetup`.
 Run `cargo test --test concurrent_events` to verify the trace contract.
 
 ### macOS GUI
 
 Run `cargo run --bin rrc-gui` on Rust stable. Click **執行 / Run** to start one
-fresh race using the same implementation as the CLI example. The window lists
+fresh race. Select a T300 value from the eight standard base values
+(`100`, `200`, `300`, `400`, `600`, `1000`, `1500`, `2000` ms;
+3GPP TS 38.331, `UE-TimersAndConstants.t300`). The selection stays fixed
+across runs until changed. Each round uniformly samples an integer
+`RRCSetup` delay within ±50 ms of the selected T300 and shows that delay.
+This distribution is a demo input, not a 3GPP requirement. The window lists
 the two received events in order, each before/after state, and why the late
-event was rejected. The state diagram replays the observed route: blue marks
+event was rejected. The state diagram replays the observed route: mint marks
 accepted transitions and amber marks the rejected event without a state change.
 Replay pacing is for display only; it does not change the race. The runtime
 model uses only the standard library; the GUI uses `eframe`.
+
+Use **Procedure** to switch from the live T300 race to a lifecycle scenario.
+**回放 / Replay** reveals the state path and dispatch outcome one step at a time.
+The scenario timers are modeled as explicit expiry events, not real timers.
+
+**Stochastic Run** generates a new trajectory from the entered unsigned
+64-bit seed and the selected T300. Reusing both inputs reproduces the same
+events and simulated timestamps. The run stops on return to `Idle` or after
+24 events. The trace uses a simulated clock; replay speed is independent.
+T301 and T319 are fixed at 100 ms, T311 at 1000 ms. Candidate responses and
+cell selection are sampled uniformly from 50% to 150% of their deadline;
+expiry wins a tie. After a completed connection, release, suspend, and radio
+link failure are equally likely, with a uniformly sampled 20–200 ms wait.
+These distributions are demo inputs, not measurements or 3GPP requirements.
 
 ## Run and verify
 
@@ -80,6 +99,7 @@ CLI checks.
 ## Non-goals
 
 This PoC is not a complete modem stack, a standards implementation, a timing
-model, a hardware abstraction, or evidence of functional-safety compliance. It
-exists to teach a narrow design technique: use types, explicit failures, and a
-no-wildcard exhaustive fixture to keep safety-relevant changes visible.
+model, a hardware abstraction, or evidence of functional-safety compliance.
+It omits access barring and T302, security and bearer procedures, and actual
+cell-selection logic. The recovery scenarios assume eligibility for
+reestablishment; the suitable cell is supplied as an input.

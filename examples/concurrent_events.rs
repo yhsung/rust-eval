@@ -1,7 +1,7 @@
 use rust_modem_safety_island::{TransitionOutcome, race_events};
 
 fn main() {
-    const ROUNDS: usize = 100;
+    const ROUNDS: usize = 10;
     let mut setup_wins = 0;
     let mut expiry_wins = 0;
     for _ in 0..ROUNDS {
@@ -17,5 +17,5 @@ fn main() {
         }
         *wins += 1;
     }
-    println!("{ROUNDS} rounds: SetupComplete first {setup_wins}, T300Expiry first {expiry_wins}");
+    println!("{ROUNDS} rounds: RRCSetup first {setup_wins}, T300Expiry first {expiry_wins}");
 }

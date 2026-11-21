@@ -1,5 +1,6 @@
 use rust_modem_safety_island::{
-    Cell, Connected, Event, Idle, RlfCause, RrcState, TransitionOutcome, dispatch,
+    Cell, Completion, Connected, Event, Idle, RlfCause, RrcState, SelectingCell, Timer, TimerId,
+    TransitionOutcome, dispatch,
 };
 
 #[test]
@@ -13,7 +14,7 @@ fn start_connection_enters_connecting_with_t300() {
         RrcState::Idle(Idle {
             selected_cell: cell.clone(),
         }),
-        Event::StartConnection { transaction_id: 7 },
+        Event::RrcSetupRequest { transaction_id: 7 },
     )
     .unwrap();
 
@@ -29,7 +30,7 @@ fn start_connection_enters_connecting_with_t300() {
 }
 
 #[test]
-fn setup_complete_consumes_connecting_t300_before_connected() {
+fn rrc_setup_consumes_connecting_t300_before_connected() {
     let cell = Cell {
         pci: 123,
         rsrp_dbm: -85,
@@ -38,12 +39,12 @@ fn setup_complete_consumes_connecting_t300_before_connected() {
         RrcState::Idle(Idle {
             selected_cell: cell.clone(),
         }),
-        Event::StartConnection { transaction_id: 7 },
+        Event::RrcSetupRequest { transaction_id: 7 },
     )
     .unwrap()
     .state;
 
-    let result = dispatch(connecting, Event::SetupComplete { c_rnti: 0x1234 }).unwrap();
+    let result = dispatch(connecting, Event::RrcSetup { c_rnti: 0x1234 }).unwrap();
 
     assert_eq!(result.outcome, TransitionOutcome::ConnectionEstablished);
     assert_eq!(
@@ -51,6 +52,7 @@ fn setup_complete_consumes_connecting_t300_before_connected() {
         RrcState::Connected(Connected {
             serving_cell: cell,
             c_rnti: 0x1234,
+            pending_completion: Some(Completion::Setup),
         })
     );
 }
@@ -65,7 +67,7 @@ fn t300_expiry_returns_to_idle_with_selected_cell() {
         RrcState::Idle(Idle {
             selected_cell: cell.clone(),
         }),
-        Event::StartConnection { transaction_id: 8 },
+        Event::RrcSetupRequest { transaction_id: 8 },
     )
     .unwrap()
     .state;
@@ -91,8 +93,9 @@ fn release_returns_connected_serving_cell_to_idle() {
         RrcState::Connected(Connected {
             serving_cell: cell.clone(),
             c_rnti: 0x1234,
+            pending_completion: None,
         }),
-        Event::Release,
+        Event::RrcRelease { suspend: false },
     )
     .unwrap();
 
@@ -106,7 +109,7 @@ fn release_returns_connected_serving_cell_to_idle() {
 }
 
 #[test]
-fn radio_link_failure_returns_connected_serving_cell_to_idle() {
+fn radio_link_failure_starts_cell_selection_from_the_serving_cell() {
     let serving_cell = Cell {
         pci: 126,
         rsrp_dbm: -88,
@@ -119,6 +122,7 @@ fn radio_link_failure_returns_connected_serving_cell_to_idle() {
         RrcState::Connected(Connected {
             serving_cell: serving_cell.clone(),
             c_rnti: 0x1234,
+            pending_completion: None,
         }),
         Event::RadioLinkFailure {
             cause: RlfCause::OutOfSync,
@@ -130,8 +134,9 @@ fn radio_link_failure_returns_connected_serving_cell_to_idle() {
     assert_eq!(result.outcome, TransitionOutcome::RadioLinkFailure);
     assert_eq!(
         result.state,
-        RrcState::Idle(Idle {
-            selected_cell: serving_cell,
+        RrcState::SelectingCell(SelectingCell {
+            previous_cell: serving_cell,
+            t311: Timer::start(TimerId::T311),
         })
     );
 }
@@ -144,11 +149,11 @@ fn release_in_idle_is_rejected_with_stable_kinds() {
             rsrp_dbm: -100,
         },
     });
-    let error = dispatch(state.clone(), Event::Release).unwrap_err();
+    let error = dispatch(state.clone(), Event::RrcRelease { suspend: false }).unwrap_err();
 
     assert_eq!(
         format!("{error:?}"),
-        "UnexpectedEvent { state: Idle, event: Release }"
+        "UnexpectedEvent { state: Idle, event: RrcRelease }"
     );
     assert_eq!(
         state,
