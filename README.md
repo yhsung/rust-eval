@@ -24,6 +24,23 @@ deliberately matches every state/event combination without a wildcard arm. The
 compile-fail test injects one new event and asks Rust to compile it, proving the
 compiler reports an uncovered combination.
 
+## NAS consideration: simplified CM tracking
+
+Each RRC state maps to a simplified 5GMM CM state (`CmState`):
+
+| RRC | CM | Why |
+| --- | --- | --- |
+| `Idle`, `Connecting` | CM-IDLE | N2 is not up yet; T300 expiry or reject ends only the RRC procedure |
+| `Connected`, `Inactive` | CM-CONNECTED | N2 is established; suspend keeps the 5GC connection |
+| `Resuming`, `SelectingCell`, `Reestablishing` | CM-CONNECTED | retained from the previous connection until success or return to `Idle` |
+
+So suspend keeps CM-CONNECTED, radio-link failure keeps CM-CONNECTED while
+selecting a cell, and only a return to `Idle` (release, reject, or timer
+expiry) drops back to CM-IDLE. The CLI prints the CM side of every step and
+the GUI event trace shows it; the mapping is derived from the RRC state, so
+the two can never disagree. Full NAS (RM registration, PDU sessions,
+security) remains out of scope.
+
 ## Scenarios
 
 The CLI runs 13 repeatable scenarios:
@@ -92,14 +109,15 @@ cargo fmt --check
 cargo clippy -- -D warnings
 ```
 
-`cargo run` prints each scenario and each transition result. The test suite
-includes the compiler-coverage demonstration as well as runtime transition and
-CLI checks.
+`cargo run` prints each scenario and each transition result with its CM side.
+The test suite includes the compiler-coverage demonstration as well as runtime
+transition and CLI checks.
 
 ## Non-goals
 
 This PoC is not a complete modem stack, a standards implementation, a timing
 model, a hardware abstraction, or evidence of functional-safety compliance.
-It omits access barring and T302, security and bearer procedures, and actual
-cell-selection logic. The recovery scenarios assume eligibility for
-reestablishment; the suitable cell is supplied as an input.
+It omits access barring and T302, security and bearer procedures, RM
+registration and PDU sessions, and actual cell-selection logic. The recovery
+scenarios assume eligibility for reestablishment; the suitable cell is
+supplied as an input.

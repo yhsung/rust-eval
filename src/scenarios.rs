@@ -1,5 +1,5 @@
 use crate::{
-    Cell, DispatchError, Event, Idle, RlfCause, RrcState, StateKind, Transition, dispatch,
+    Cell, CmState, DispatchError, Event, Idle, RlfCause, RrcState, StateKind, Transition, dispatch,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -12,6 +12,7 @@ pub struct ScenarioResult {
 pub struct ScenarioStep {
     pub event: &'static str,
     pub before: StateKind,
+    pub cm_before: CmState,
     pub result: Result<Transition, DispatchError>,
 }
 
@@ -130,6 +131,7 @@ fn run_scenario(name: &'static str, events: impl IntoIterator<Item = Step>) -> S
         steps.push(ScenarioStep {
             event: event_description,
             before,
+            cm_before: before.cm_state(),
             result,
         });
     }

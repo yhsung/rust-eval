@@ -98,6 +98,31 @@ pub enum StateKind {
     Reestablishing,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CmState {
+    Idle,
+    Connected,
+}
+
+impl StateKind {
+    /// Simplified 5GMM CM view of an RRC state.
+    ///
+    /// `Idle` and `Connecting` are CM-IDLE: the N2 connection is not up yet,
+    /// so a T300 expiry or reject releases only the RRC procedure. Every
+    /// other RRC state retains CM-CONNECTED (suspend, resume, and cell
+    /// selection keep the 5GC connection) until a return to `Idle`.
+    pub fn cm_state(self) -> CmState {
+        match self {
+            Self::Idle | Self::Connecting => CmState::Idle,
+            Self::Connected
+            | Self::Inactive
+            | Self::Resuming
+            | Self::SelectingCell
+            | Self::Reestablishing => CmState::Connected,
+        }
+    }
+}
+
 impl RrcState {
     pub fn kind(&self) -> StateKind {
         match self {
@@ -109,6 +134,11 @@ impl RrcState {
             Self::SelectingCell(_) => StateKind::SelectingCell,
             Self::Reestablishing(_) => StateKind::Reestablishing,
         }
+    }
+
+    /// Simplified 5GMM CM view of this RRC state; see [`StateKind::cm_state`].
+    pub fn cm_state(&self) -> CmState {
+        self.kind().cm_state()
     }
 }
 

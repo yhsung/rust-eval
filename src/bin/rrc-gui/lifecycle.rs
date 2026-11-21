@@ -78,9 +78,18 @@ pub(super) fn lifecycle_trace(
                     Ok(transition) => (
                         transition.state.kind(),
                         SIGNAL,
-                        format!("{:?}", transition.outcome),
+                        format!(
+                            "{:?} · CM-{:?} → CM-{:?}",
+                            transition.outcome,
+                            step.cm_before,
+                            transition.state.cm_state()
+                        ),
                     ),
-                    Err(error) => (step.before, REJECTED, format!("{error:?}")),
+                    Err(error) => (
+                        step.before,
+                        REJECTED,
+                        format!("{error:?} · CM-{:?} (unchanged)", step.cm_before),
+                    ),
                 });
                 ui.horizontal(|ui| {
                     if let Some(times) = steps_ms {

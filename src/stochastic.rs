@@ -45,6 +45,7 @@ pub fn stochastic_run(seed: u64, t300_ms: u64) -> StochasticRun {
         steps.push(ScenarioStep {
             event: label,
             before,
+            cm_before: before.cm_state(),
             result: Ok(transition),
         });
         clock_ms += delay;
