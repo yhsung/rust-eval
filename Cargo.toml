@@ -2,9 +2,11 @@
 name = "rust-modem-safety-island"
 version = "0.1.0"
 edition = "2024"
+default-run = "rust-modem-safety-island"
 
 [lib]
 name = "rust_modem_safety_island"
 path = "src/lib.rs"
 
 [dependencies]
+eframe = { version = "0.33", default-features = false, features = ["default_fonts", "glow", "x11"] }

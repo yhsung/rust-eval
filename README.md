@@ -1,6 +1,6 @@
 # Rust Modem Safety Island PoC
 
-This dependency-free teaching PoC shows a small Rust "Safety Island" around a
+This teaching PoC shows a small Rust "Safety Island" around a
 modem-facing connection procedure. It makes state, events, timer ownership, and
 unexpected events explicit so that contributors can inspect and exercise the
 invariants.
@@ -50,12 +50,21 @@ The example races 100 fresh connections and reports which event arrived first:
 Counts depend on scheduling. A shared deadline does not guarantee fairness
 or that both outcomes appear. The timer uses a real elapsed delay, but the
 10 ms value and setup arrival are demo inputs, not 3GPP behavior.
-Run `cargo test --example concurrent_events` to check that whichever event
-arrives first drives the transition and the second is rejected.
+Run `cargo test --test concurrent_events` to verify the trace contract.
+
+### macOS GUI
+
+Run `cargo run --bin rrc-gui` on Rust stable. Click **執行 / Run** to start one
+fresh race using the same implementation as the CLI example. The window lists
+the two received events in order, each before/after state, and why the late
+event was rejected. The state diagram replays the observed route: blue marks
+accepted transitions and amber marks the rejected event without a state change.
+Replay pacing is for display only; it does not change the race. The runtime
+model uses only the standard library; the GUI uses `eframe`.
 
 ## Run and verify
 
-Use Rust stable with no extra dependencies:
+Use Rust stable:
 
 ```sh
 cargo run
